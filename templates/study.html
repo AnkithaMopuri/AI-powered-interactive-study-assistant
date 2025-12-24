@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Mode - AI Study Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 Study: {{ document[1] }}</h1>
+            <a href="{{ url_for('index') }}" class="btn-back">← Back to Documents</a>
+        </header>
+
+        <div class="study-layout">
+            <!-- Left Panel: Features -->
+            <div class="feature-panel">
+                <div class="feature-card">
+                    <h3>💬 Ask Questions</h3>
+                    <form id="questionForm">
+                        <textarea id="questionInput" placeholder="Ask anything about your document..." rows="3"></textarea>
+                        <button type="submit" class="btn btn-primary">Get Answer</button>
+                    </form>
+                    <div id="answerResult" class="result-box"></div>
+                </div>
+
+                <div class="feature-card">
+                    <h3>📝 Get Summary</h3>
+                    <select id="summaryRatio">
+                        <option value="0.2">Brief (20%)</option>
+                        <option value="0.3" selected>Medium (30%)</option>
+                        <option value="0.5">Detailed (50%)</option>
+                    </select>
+                    <button id="summarizeBtn" class="btn btn-secondary">Generate Summary</button>
+                    <div id="summaryResult" class="result-box"></div>
+                </div>
+
+                <div class="feature-card">
+                    <h3>🎯 Take Quiz</h3>
+                    <div class="quiz-options">
+                        <label>MCQs: <input type="number" id="numMcq" value="5" min="1" max="10"></label>
+                        <label>Short Answer: <input type="number" id="numShort" value="3" min="1" max="5"></label>
+                    </div>
+                    <button id="quizBtn" class="btn btn-primary">Generate Quiz</button>
+                    <div id="quizResult" class="result-box"></div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Document Preview -->
+            <div class="document-panel">
+                <h3>Document Preview</h3>
+                <div class="document-stats">
+                    <span>📊 {{ document[5] }} words</span>
+                    <span>📄 {{ document[6] }} sentences</span>
+                </div>
+                <div id="documentPreview" class="document-content">
+                    {{ document[3][:1000] }}...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Question Answering
+    document.getElementById('questionForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const question = document.getElementById('questionInput').value;
+        const resultDiv = document.getElementById('answerResult');
+        
+        if (!question.trim()) {
+            resultDiv.innerHTML = '<div class="error">Please enter a question</div>';
+            return;
+        }
+        
+        resultDiv.innerHTML = '<div class="loading">🔍 Searching for answer...</div>';
+        
+        try {
+            const response = await fetch('/api/ask', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({question})
+            });
+            
+            const data = await response.json();
+            
+            if (data.answer) {
+                const confidence = (data.confidence * 100).toFixed(0);
+                resultDiv.innerHTML = `
+                    <div class="answer">
+                        <strong>Answer:</strong>
+                        <p>${data.answer}</p>
+                        <span class="confidence">Confidence: ${confidence}%</span>
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `<div class="error">${data.error || 'No answer found'}</div>`;
+            }
+        } catch (error) {
+            resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+        }
+    });
+
+    // Summarization
+    document.getElementById('summarizeBtn').addEventListener('click', async () => {
+        const ratio = parseFloat(document.getElementById('summaryRatio').value);
+        const resultDiv = document.getElementById('summaryResult');
+        
+        resultDiv.innerHTML = '<div class="loading">📝 Generating summary...</div>';
+        
+        try {
+            const response = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ratio})
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to generate summary');
+            }
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                resultDiv.innerHTML = `<div class="error">${data.error}</div>`;
+                return;
+            }
+            
+            let html = '<div class="summary">';
+            
+            if (data.summary) {
+                html += '<strong>Summary:</strong><p>' + data.summary + '</p>';
+            }
+            
+            if (data.bullet_points && Array.isArray(data.bullet_points) && data.bullet_points.length > 0) {
+                html += '<strong>Key Points:</strong><ul>';
+                data.bullet_points.forEach(point => {
+                    html += `<li>${point}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            html += '</div>';
+            resultDiv.innerHTML = html;
+            
+        } catch (error) {
+            console.error('Summary error:', error);
+            resultDiv.innerHTML = `<div class="error">Error generating summary: ${error.message}</div>`;
+        }
+    });
+
+    // Quiz Generation
+    document.getElementById('quizBtn').addEventListener('click', async () => {
+        const numMcq = parseInt(document.getElementById('numMcq').value);
+        const numShort = parseInt(document.getElementById('numShort').value);
+        const resultDiv = document.getElementById('quizResult');
+        
+        resultDiv.innerHTML = '<div class="loading">🎯 Generating quiz...</div>';
+        
+        try {
+            const response = await fetch('/api/generate-quiz', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({num_mcq: numMcq, num_short: numShort})
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to generate quiz');
+            }
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                resultDiv.innerHTML = `<div class="error">${data.error}</div>`;
+                return;
+            }
+            
+            let html = '<div class="quiz">';
+            
+            // MCQ Questions
+            if (data.mcq && Array.isArray(data.mcq) && data.mcq.length > 0) {
+                html += '<h4>Multiple Choice Questions</h4>';
+                data.mcq.forEach((q, idx) => {
+                    html += `
+                        <div class="quiz-question">
+                            <p><strong>Q${idx + 1}:</strong> ${q.question}</p>
+                            <div class="options">
+                    `;
+                    
+                    if (q.options && Array.isArray(q.options)) {
+                        q.options.forEach((opt) => {
+                            html += `
+                                <label>
+                                    <input type="radio" name="mcq${idx}" value="${opt}">
+                                    ${opt}
+                                </label>
+                            `;
+                        });
+                    }
+                    
+                    html += `
+                            </div>
+                            <button class="btn-check" onclick="checkMCQ(this, '${q.correct_answer}')">Check Answer</button>
+                            <div class="feedback"></div>
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<p class="warning">Unable to generate MCQ questions from this document. Try a document with more factual content.</p>';
+            }
+            
+            // Short Answer Questions
+            if (data.short_answer && Array.isArray(data.short_answer) && data.short_answer.length > 0) {
+                html += '<h4>Short Answer Questions</h4>';
+                data.short_answer.forEach((q, idx) => {
+                    // Escape single quotes in the answer
+                    const escapedAnswer = q.answer.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    html += `
+                        <div class="quiz-question">
+                            <p><strong>Q${idx + 1}:</strong> ${q.question}</p>
+                            <textarea class="short-answer" rows="3" placeholder="Your answer..."></textarea>
+                            <button class="btn-check" onclick="showAnswer(this, '${escapedAnswer}')">Show Answer</button>
+                            <div class="feedback"></div>
+                        </div>
+                    `;
+                });
+            }
+            
+            html += '</div>';
+            
+            if ((!data.mcq || data.mcq.length === 0) && (!data.short_answer || data.short_answer.length === 0)) {
+                html = '<div class="error">Unable to generate quiz questions. Please upload a document with more structured content.</div>';
+            }
+            
+            resultDiv.innerHTML = html;
+            
+        } catch (error) {
+            console.error('Quiz error:', error);
+            resultDiv.innerHTML = `<div class="error">Error generating quiz: ${error.message}</div>`;
+        }
+    });
+
+    function checkMCQ(button, correctAnswer) {
+        const question = button.closest('.quiz-question');
+        const selected = question.querySelector('input[type="radio"]:checked');
+        const feedback = question.querySelector('.feedback');
+        
+        if (!selected) {
+            feedback.innerHTML = '<span class="warning">Please select an answer</span>';
+            return;
+        }
+        
+        if (selected.value === correctAnswer) {
+            feedback.innerHTML = '<span class="success">✓ Correct!</span>';
+        } else {
+            feedback.innerHTML = `<span class="error">✗ Incorrect. Correct answer: ${correctAnswer}</span>`;
+        }
+    }
+
+    function showAnswer(button, answer) {
+        const feedback = button.closest('.quiz-question').querySelector('.feedback');
+        // Unescape the answer
+        const unescapedAnswer = answer.replace(/\\'/g, "'").replace(/&quot;/g, '"');
+        feedback.innerHTML = `<div class="answer"><strong>Expected Answer:</strong><p>${unescapedAnswer}</p></div>`;
+    }
+</script>
+</body>
+</html>

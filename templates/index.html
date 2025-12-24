@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Study Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎓 AI-Powered Study Assistant</h1>
+            <p>Upload your study materials and get instant summaries, answers, and quizzes</p>
+        </header>
+
+        <div class="main-content">
+            <div class="upload-section">
+                <h2>Upload Study Material</h2>
+                <a href="{{ url_for('upload') }}" class="btn btn-primary">
+                    📤 Upload New Document
+                </a>
+            </div>
+
+            <div class="documents-section">
+                <h2>Your Documents</h2>
+                {% if documents %}
+                    <div class="document-list">
+                        {% for doc in documents %}
+                        <div class="document-card" data-doc-id="{{ doc[0] }}">
+                            <h3>{{ doc[1] }}</h3>
+                            <p>Words: {{ doc[3] }} | Uploaded: {{ doc[2] }}</p>
+                            <div class="card-actions">
+                                <a href="{{ url_for('study', doc_id=doc[0]) }}" class="btn btn-secondary">
+                                    📖 Study
+                                </a>
+                                <button class="btn btn-danger delete-btn" data-doc-id="{{ doc[0] }}">
+    🗑️ Delete
+</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="no-docs">No documents uploaded yet. Upload your first document to get started!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Add event listeners to all delete buttons
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.delete-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const docId = this.getAttribute('data-doc-id');
+                deleteDocument(docId);
+            });
+        });
+    });
+
+    async function deleteDocument(docId) {
+        if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/delete/${docId}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                const card = document.querySelector(`[data-doc-id="${docId}"]`);
+                card.style.opacity = '0';
+                card.style.transform = 'scale(0.8)';
+                
+                setTimeout(() => {
+                    card.remove();
+                    
+                    const remainingCards = document.querySelectorAll('.document-card');
+                    if (remainingCards.length === 0) {
+                        document.querySelector('.document-list').innerHTML = 
+                            '<p class="no-docs">No documents uploaded yet. Upload your first document to get started!</p>';
+                    }
+                }, 300);
+
+                alert('✓ Document deleted successfully!');
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Error deleting document: ' + error.message);
+        }
+    }
+</script>
+</body>
+</html>
